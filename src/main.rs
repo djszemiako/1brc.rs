@@ -1,9 +1,41 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::env;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 
+struct Metrics {
+    min: f32,
+    max: f32,
+    count: i32,
+    sum: f32,
+}
+
+impl Metrics {
+    fn new(measurement: f32) -> Self {
+        Metrics {
+            min: measurement,
+            max: measurement,
+            count: 1,
+            sum: measurement,
+        }
+    }
+}
+
+impl fmt::Display for Metrics {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}/{}/{}",
+            self.min,
+            self.sum / self.count as f32,
+            self.max
+        )
+    }
+}
+
+// https://doc.rust-lang.org/stable/rust-by-example/std_misc/file/read_lines.html
 fn read_lines<P: AsRef<Path>>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>> {
     let file = File::open(filename)?;
 
@@ -15,7 +47,7 @@ fn main() {
 
     let filename = &args[1];
 
-    let mut stations: HashMap<String, Vec<f32>> = HashMap::new();
+    let mut stations: BTreeMap<String, Metrics> = BTreeMap::new();
 
     if let Ok(lines) = read_lines(filename) {
         for line in lines.map_while(Result::ok) {
@@ -34,12 +66,20 @@ fn main() {
             if !stations.contains_key(station) {
                 println!("Station '{station}' does not exist, adding...");
 
-                let measurements: Vec<f32> = vec![measurement];
-
-                stations.insert(station.to_string(), measurements);
+                stations.insert(station.to_string(), Metrics::new(measurement));
             } else {
                 if let Some(x) = stations.get_mut(station) {
-                    x.push(measurement);
+                    if measurement > x.max {
+                        x.max = measurement;
+                    }
+
+                    if measurement < x.min {
+                        x.min = measurement;
+                    }
+
+                    x.sum = x.sum + measurement;
+
+                    x.count = x.count + 1;
                 }
             }
         }
@@ -48,13 +88,6 @@ fn main() {
     println!("Iterating over {} stations...", stations.len());
 
     for (k, v) in stations.iter() {
-        println!(
-            "Station: {}, Measumrents: {}",
-            k,
-            v.into_iter()
-                .map(|i| i.to_string())
-                .collect::<Vec<String>>()
-                .join(",")
-        );
+        println!("Station: {}, Measumrents: {}", k, v,);
     }
 }
